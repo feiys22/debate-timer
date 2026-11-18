@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="dark" />
+<title>辩论计时器</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='6' cy='8' r='3.2' fill='%23e36a56'/%3E%3Ccircle cx='10.2' cy='8' r='3.2' fill='%238eadd4'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg: #12110e;
+    --raise: #1c1a16;
+    --ink: #f4efe6;
+    --muted: #a79d90;
+    --faint: #8a8174;
+    --line: rgba(244, 239, 230, 0.14);
+    --aff: #e36a56;
+    --neg: #8eadd4;
+    --warn: #f0c36a;
+    --shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+    --sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --serif: "Palatino Linotype", "Songti SC", "STSong", "PMingLiU", "SimSun", serif;
+    --num: Bahnschrift, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: var(--sans);
+    background: var(--bg);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  body.side-aff {
+    background:
+      radial-gradient(ellipse at 50% 36%, rgba(227, 106, 86, 0.16), transparent 46%),
+      var(--bg);
+  }
+  body.side-neg {
+    background:
+      radial-gradient(ellipse at 50% 36%, rgba(142, 173, 212, 0.18), transparent 46%),
+      var(--bg);
+  }
+  body.side-both {
+    background:
+      radial-gradient(ellipse at 24% 42%, rgba(227, 106, 86, 0.14), transparent 40%),
+      radial-gradient(ellipse at 76% 42%, rgba(142, 173, 212, 0.16), transparent 40%),
+      var(--bg);
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 1px solid var(--warn);
+    outline-offset: 3px;
+  }
+  .app {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  #sideBar { height: 3px; flex: none; background: var(--aff); }
+  header { flex: none; }
+  .head {
+    display: grid;
+    grid-template-columns: 108px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 18px;
+    padding: 16px 28px 6px;
+  }
+  .brand {
+    font-size: 13px;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+  }
+  #topic {
+    width: 100%;
+    min-width: 0;
+    text-align: center;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid transparent;
+    padding: 6px 8px 8px;
+    font-family: var(--serif);
+    font-size: clamp(22px, 2.6vw, 36px);
+    line-height: 1.35;
+  }
+  #topic::placeholder { color: rgba(244, 239, 230, 0.34); }
+  #topic:hover, #topic:focus { border-bottom-color: var(--line); outline: none; }
+  .actions { display: flex; gap: 8px; }
+  .text-btn {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+  }
+  .text-btn:hover { color: var(--ink); }
+  #btnMute[aria-pressed="true"] { color: var(--warn); border-color: rgba(240, 195, 106, 0.5); }
+  main { flex: 1; min-height: 0; display: flex; }
+  #single, #free { display: none; min-width: 0; min-height: 0; }
+  #single.is-on {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 24px;
+  }
+  #roleLine {
+    margin: 0;
+    color: var(--aff);
+    font-size: 15px;
+    letter-spacing: 0.12em;
+  }
+  #phaseTitle {
+    margin: 4px 0 8px;
+    max-width: 16em;
+    font-size: clamp(28px, 3.4vw, 44px);
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-align: center;
+  }
+  #roleLine { max-width: 92vw; text-align: center; }
+  .clock {
+    position: relative;
+    width: min(42vh, 440px);
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+  }
+  .clock svg, .pane-clock svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .track, .bar { fill: none; stroke-width: 2.15; }
+  .track { stroke: rgba(244, 239, 230, 0.13); }
+  .bar {
+    stroke: var(--aff);
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+  }
+  .clock-center, .pane-center { position: relative; z-index: 1; text-align: center; }
+  .digits, .pane-time {
+    font-family: var(--num);
+    font-weight: 300;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.045em;
+    line-height: 0.9;
+  }
+  .digits { font-size: clamp(92px, 12vw, 168px); }
+  .digits.is-last, .pane-time.is-last,
+  .digits.is-done, .pane-time.is-done { color: var(--warn); }
+  .digits.is-last.is-run { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+  .status, .pane-state {
+    margin-top: 10px;
+    min-height: 1.2em;
+    color: var(--muted);
+    font-size: 14px;
+    letter-spacing: 0.08em;
+  }
+  .status.is-last, .status.is-done, .pane-state.is-last, .pane-state.is-done { color: var(--warn); }
+  #indexLabel {
+    margin-top: 14px;
+    color: var(--faint);
+    font-size: 13px;
+    letter-spacing: 0.16em;
+  }
+  #free.is-on {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr;
+    align-items: center;
+  }
+  #freeTitle {
+    grid-column: 1 / -1;
+    margin: 0;
+    padding-top: 8px;
+    text-align: center;
+    font-size: clamp(22px, 2.6vw, 34px);
+    font-weight: 500;
+    letter-spacing: 0.16em;
+  }
+  .pane {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: transparent;
+    border: 0;
+    min-width: 0;
+  }
+  .pane.aff { box-shadow: inset -1px 0 0 var(--line); }
+  .pane.is-run.aff { background: rgba(227, 106, 86, 0.08); }
+  .pane.is-run.neg { background: rgba(142, 173, 212, 0.1); }
+  .panes-live .pane:not(.is-run) { opacity: 0.46; }
+  .pane.is-out { opacity: 0.4; }
+  .pane.aff .pane-name { color: var(--aff); }
+  .pane.neg .pane-name { color: var(--neg); }
+  .pane-name {
+    font-family: var(--serif);
+    font-size: clamp(22px, 2.4vw, 34px);
+    letter-spacing: 0.08em;
+  }
+  .pane-clock {
+    position: relative;
+    width: min(34vh, 320px);
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+  }
+  .pane-time { font-size: clamp(72px, 8vw, 132px); }
+  footer {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 22px 14px;
+  }
+  #nextLine, #hint {
+    text-align: center;
+    color: var(--faint);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+  }
+  .transport {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 14px;
+  }
+  .btn {
+    min-width: 108px;
+    height: 42px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+  }
+  .btn:hover { color: var(--ink); }
+  .btn:disabled { opacity: 0.35; cursor: default; }
+  .btn.is-nudge { color: var(--ink); border-color: rgba(240, 195, 106, 0.7); }
+  #btnPlay {
+    width: 78px;
+    height: 78px;
+    min-width: 78px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--ink);
+    color: #17150f;
+    display: grid;
+    place-items: center;
+    box-shadow: var(--shadow);
+  }
+  #btnPlay:hover { background: #fff; }
+  #btnPlay .play-label { font-size: 14px; font-weight: 600; letter-spacing: 0.08em; }
+  #rail {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 2px 2px 6px;
+    scrollbar-width: thin;
+    scrollbar-color: #4a433a transparent;
+  }
+  .rail-item {
+    flex: 0 0 138px;
+    text-align: left;
+    padding: 10px 12px 11px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    scroll-snap-align: start;
+  }
+  .rail-item:hover { background: rgba(255, 255, 255, 0.03); }
+  .rail-item.is-current {
+    background: var(--raise);
+    border-color: var(--line);
+    color: var(--ink);
+  }
+  .rail-item.is-done { opacity: 0.5; }
+  .rail-item .k { font-size: 11px; letter-spacing: 0.16em; color: var(--faint); }
+  .rail-item .t {
+    margin-top: 4px;
+    font-size: 15px;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rail-item .s, .rail-item .d {
+    margin-top: 2px;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rail-item.aff.is-current { box-shadow: inset 2px 0 0 var(--aff); }
+  .rail-item.neg.is-current { box-shadow: inset 2px 0 0 var(--neg); }
+  .rail-item.both.is-current { box-shadow: inset 2px 0 0 var(--warn); }
+  #sheet {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 5;
+    width: min(440px, 100%);
+    display: flex;
+    flex-direction: column;
+    background: #181610;
+    border-left: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    transform: translateX(104%);
+    visibility: hidden;
+  }
+  #sheet.is-open { visibility: visible; transform: translateX(0); }
+  @media (min-width: 980px) {
+    .app.is-settings .head,
+    .app.is-settings main,
+    .app.is-settings footer { margin-right: 440px; }
+  }
+  .sheet-head, .sheet-block, .card, .sheet-foot { padding-left: 22px; padding-right: 22px; }
+  .sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 18px;
+    padding-bottom: 8px;
+  }
+  .sheet-head h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.12em; }
+  .sheet-body { overflow: auto; flex: 1; padding-bottom: 28px; scrollbar-width: thin; }
+  .lead { margin: 0 22px 16px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  label.field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--faint); letter-spacing: 0.08em; }
+  .field input, .field select, .time-inp {
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: #100f0c;
+    padding: 0 10px;
+    letter-spacing: 0;
+    color: var(--ink);
+  }
+  .sheet-block { margin-bottom: 16px; }
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .stepper button {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink);
+  }
+  .stepper b { font-size: 22px; font-weight: 500; font-family: var(--num); }
+  .stepper span { margin-left: 6px; color: var(--muted); font-size: 13px; }
+  .row-actions, .sound-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .card {
+    margin: 0 22px 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.02);
+  }
+  .card.aff { box-shadow: inset 3px 0 0 var(--aff); }
+  .card.neg { box-shadow: inset 3px 0 0 var(--neg); }
+  .card.both { box-shadow: inset 3px 0 0 var(--warn); }
+  .card-top { display: flex; align-items: center; gap: 8px; }
+  .card-top .idx { width: 28px; color: var(--faint); font-family: var(--num); font-size: 13px; }
+  .f-title {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 0 8px;
+  }
+  .f-title:hover, .f-title:focus { border-color: var(--line); background: #100f0c; outline: none; }
+  .icon-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+  }
+  .icon-btn:hover { border-color: var(--line); color: var(--ink); }
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1.15fr 64px 64px;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .card-grid .field input, .card-grid .field select { width: 100%; padding: 0 6px; }
+  #cueNote { min-height: 1.2em; margin: 8px 0 0; color: var(--warn); font-size: 13px; letter-spacing: 0; }
+  .check { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; letter-spacing: 0; }
+  #totalTime { margin: 12px 22px 0; color: var(--muted); font-size: 13px; }
+  #flash {
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(240, 195, 106, 0.2);
+    opacity: 0;
+  }
+  #flash.go { animation: flash 0.85s ease-out; }
+  @keyframes flash {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  @media (max-width: 860px) {
+    .head { grid-template-columns: minmax(0, 1fr) auto; padding: 12px 14px 4px; }
+    .brand { display: none; }
+    .card-grid { grid-template-columns: 1fr 1fr; }
+    #hint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <div id="sideBar"></div>
+    <div class="head">
+      <div class="brand">辩论计时</div>
+      <input id="topic" maxlength="80" placeholder="点击填写辩题" spellcheck="false" autocomplete="off" />
+      <div class="actions">
+        <button type="button" class="text-btn" id="btnMute" aria-pressed="false">提示音</button>
+        <button type="button" class="text-btn" id="btnFull">全屏</button>
+        <button type="button" class="text-btn" id="btnSettings">赛程</button>
+      </div>
+    </div>
+  </header>
+  <main>
+    <section id="single">
+      <p id="roleLine"></p>
+      <h1 id="phaseTitle"></h1>
+      <div class="clock">
+        <svg viewBox="0 0 100 100" aria-hidden="true">
+          <circle class="track" cx="50" cy="50" r="44"></circle>
+          <circle class="bar" id="ringBar" cx="50" cy="50" r="44" pathLength="100"></circle>
+        </svg>
+        <div class="clock-center">
+          <div class="digits" id="digits">03:00</div>
+          <div class="status" id="status" aria-live="assertive"></div>
+        </div>
+      </div>
+      <div id="indexLabel"></div>
+    </section>
+    <section id="free">
+      <h2 id="freeTitle">自由辩论</h2>
+      <button type="button" class="pane aff" id="affPane">
+        <div class="pane-name" id="affNameL">正方</div>
+        <div class="pane-clock">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="track" cx="50" cy="50" r="44"></circle>
+            <circle class="bar" id="affRing" cx="50" cy="50" r="44" pathLength="100"></circle>
+          </svg>
+          <div class="pane-center">
+            <div class="pane-time" id="affTime">04:00</div>
+            <div class="pane-state" id="affState"></div>
+          </div>
+        </div>
+      </button>
+      <button type="button" class="pane neg" id="negPane">
+        <div class="pane-name" id="negNameL">反方</div>
+        <div class="pane-clock">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="track" cx="50" cy="50" r="44"></circle>
+            <circle class="bar" id="negRing" cx="50" cy="50" r="44" pathLength="100"></circle>
+          </svg>
+          <div class="pane-center">
+            <div class="pane-time" id="negTime">04:00</div>
+            <div class="pane-state" id="negState"></div>
+          </div>
+        </div>
+      </button>
+    </section>
+  </main>
+  <footer>
+    <div id="nextLine"></div>
+    <div class="transport">
+      <button type="button" class="btn" id="btnPrev">上一环节</button>
+      <button type="button" class="btn" id="btnReset">重置</button>
+      <button type="button" id="btnPlay" aria-label="开始"></button>
+      <button type="button" class="btn" id="btnNext">下一环节</button>
+    </div>
+    <div id="rail"></div>
+    <div id="hint"></div>
+  </footer>
+</div>
+<aside id="sheet" aria-hidden="true">
+  <div class="sheet-head">
+    <h2>赛程</h2>
+    <button type="button" class="text-btn" id="btnClose">完成</button>
+  </div>
+  <div class="sheet-body">
+    <p class="lead">辩题写在上方。每方默认四位辩手。人数、队名、环节和时长都可以改，改完即用于当场。</p>
+    <div class="sheet-block grid-2">
+      <label class="field">正方名称<input id="affName" maxlength="16" placeholder="正方" /></label>
+      <label class="field">反方名称<input id="negName" maxlength="16" placeholder="反方" /></label>
+    </div>
+    <div class="sheet-block">
+      <div class="stepper">
+        <button type="button" id="spDec" aria-label="减少辩手">−</button>
+        <div><b id="spNum">4</b><span>人 / 方</span></div>
+        <button type="button" id="spInc" aria-label="增加辩手">+</button>
+      </div>
+      <div class="row-actions">
+        <button type="button" class="text-btn" id="btnRegen">按此人数生成标准赛程</button>
+      </div>
+      <p class="lead" style="margin-top:10px">生成会换掉当前环节。默认：立论、质询正方先；驳论、结辩反方先；自由辩论正方先。五人及以上时，倒数第二位是攻辩小结。</p>
+    </div>
+    <div id="phaseList"></div>
+    <div class="row-actions" style="padding: 0 22px">
+      <button type="button" class="text-btn" id="btnAdd">添加环节</button>
+    </div>
+    <p id="totalTime"></p>
+    <div class="sheet-block" style="margin-top:18px">
+      <label class="check"><input type="checkbox" id="chkMute" /> 关闭提示音</label>
+      <div class="sound-row">
+        <button type="button" class="text-btn" id="btnPreview10">试听十秒提示</button>
+        <button type="button" class="text-btn" id="btnPreviewEnd">试听时间到</button>
+      </div>
+      <p id="cueNote"></p>
+    </div>
+    <div class="row-actions" style="padding: 0 22px">
+      <button type="button" class="text-btn" id="btnFactory">恢复初始设置</button>
+    </div>
+  </div>
+</aside>
+<div id="flash"></div>
+<script>
+"use strict";
+const KEY = "debate-timer-v1";
+const CN = "一二三四五六七八";
+const MIN_SPEAKERS = 2;
+const MAX_SPEAKERS = 8;
+
+const $ = (id) => document.getElementById(id);
+const topic = $("topic");
+const btnMute = $("btnMute");
+const btnFull = $("btnFull");
+const btnSettings = $("btnSettings");
+const roleLine = $("roleLine");
+const phaseTitle = $("phaseTitle");
+const ringBar = $("ringBar");
+const digits = $("digits");
+const statusEl = $("status");
+const indexLabel = $("indexLabel");
+const single = $("single");
+const free = $("free");
+const affPane = $("affPane");
+const negPane = $("negPane");
+const affNameL = $("affNameL");
+const negNameL = $("negNameL");
+const affTime = $("affTime");
+const negTime = $("negTime");
+const affState = $("affState");
+const negState = $("negState");
+const affRing = $("affRing");
+const negRing = $("negRing");
+const nextLine = $("nextLine");
+const btnPrev = $("btnPrev");
+const btnReset = $("btnReset");
+const btnPlay = $("btnPlay");
+const btnNext = $("btnNext");
+const rail = $("rail");
+const hint = $("hint");
+const sheet = $("sheet");
+const affName = $("affName");
+const negName = $("negName");
+const spNum = $("spNum");
+const phaseList = $("phaseList");
+const totalTime = $("totalTime");
+const chkMute = $("chkMute");
+const cueNote = $("cueNote");
+const flashEl = $("flash");
+const app = $("app");
+
+let seq = 1;
+let audioCtx = null;
+let running = false;
+let active = "single";
+let deadline = 0;
+let lastSave = 0;
+let railKey = "";
+
+function clamp(n, a, b) { return Math.min(b, Math.max(a, n)); }
+function uid() { return "p" + (seq++) + Math.random().toString(36).slice(2, 6); }
+function speakerName(n) {
+  n = n | 0;
+  if (n >= 1 && n <= CN.length) return CN[n - 1] + "辩";
+  return "";
+}
+function fmtMs(ms) {
+  const sec = ms <= 0 ? 0 : Math.ceil(ms / 1000 - 1e-9);
+  return String(Math.floor(sec / 60)).padStart(2, "0") + ":" + String(sec % 60).padStart(2, "0");
+}
+function fmtDur(sec) {
+  return String(Math.floor(sec / 60)).padStart(2, "0") + ":" + String(sec % 60).padStart(2, "0");
+}
+function fmtWords(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (!s) return m + " 分钟";
+  if (!m) return s + " 秒";
+  return m + " 分 " + s + " 秒";
+}
+function wholeSec(ms) {
+  if (ms <= 0) return 0;
+  return Math.ceil(ms / 1000 - 1e-9);
+}
+function setText(node, text) {
+  if (node.textContent !== text) node.textContent = text;
+}
+
+function makePhase(o) {
+  const duration = clamp(Math.round(Number(o.duration) || 0), 0, 3600);
+  const full = duration * 1000;
+  const mode = o.mode === "free" ? "free" : "single";
+  let side = o.side === "neg" || o.side === "both" ? o.side : "aff";
+  if (mode === "free") side = "both";
+  return {
+    id: uid(),
+    title: o.title || "未命名",
+    side,
+    speaker: mode === "free" ? 0 : clamp(o.speaker | 0, 0, MAX_SPEAKERS),
+    mode,
+    duration,
+    left: full,
+    affLeft: full,
+    negLeft: full,
+    holder: "aff",
+    warnSingle: false,
+    warnAff: false,
+    warnNeg: false,
+    rangSingle: false,
+    rangAff: false,
+    rangNeg: false,
+    wholeSingle: null,
+    wholeAff: null,
+    wholeNeg: null
+  };
+}
+
+function generate(n) {
+  n = clamp(n, MIN_SPEAKERS, MAX_SPEAKERS);
+  const list = [];
+  const pair = (title, speaker, first, seconds) => {
+    const other = first === "aff" ? "neg" : "aff";
+    list.push(makePhase({ title, side: first, speaker, duration: seconds }));
+    list.push(makePhase({ title, side: other, speaker, duration: seconds }));
+  };
+  pair("立论", 1, "aff", 180);
+  if (n >= 3) pair("驳论", 2, "neg", 180);
+  for (let s = 3; s <= n - 1; s++) {
+    if (s === n - 1 && n >= 5) pair("攻辩小结", s, "aff", 90);
+    else pair("质询", s, "aff", 180);
+  }
+  list.push(makePhase({ title: "自由辩论", side: "both", speaker: 0, mode: "free", duration: 240 }));
+  pair("总结陈词", n, "neg", 180);
+  return list;
+}
+
+function fresh() {
+  return {
+    topic: "",
+    affName: "正方",
+    negName: "反方",
+    speakers: 4,
+    muted: false,
+    index: 0,
+    phases: generate(4)
+  };
+}
+
+function normalizePhase(p) {
+  if (!p || typeof p !== "object") return null;
+  const duration = clamp(Math.round(Number(p.duration) || 0), 0, 3600);
+  const full = duration * 1000;
+  const num = (v, d) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(0, n) : d;
+  };
+  const mode = p.mode === "free" ? "free" : "single";
+  let side = p.side === "neg" || p.side === "both" ? p.side : "aff";
+  if (mode === "free") side = "both";
+  return {
+    id: String(p.id || uid()),
+    title: String(p.title || "未命名").slice(0, 40),
+    side,
+    speaker: mode === "free" ? 0 : clamp(p.speaker | 0, 0, MAX_SPEAKERS),
+    mode,
+    duration,
+    left: num(p.left, full),
+    affLeft: num(p.affLeft, full),
+    negLeft: num(p.negLeft, full),
+    holder: p.holder === "neg" ? "neg" : "aff",
+    warnSingle: !!p.warnSingle,
+    warnAff: !!p.warnAff,
+    warnNeg: !!p.warnNeg,
+    rangSingle: !!p.rangSingle,
+    rangAff: !!p.rangAff,
+    rangNeg: !!p.rangNeg,
+    wholeSingle: null,
+    wholeAff: null,
+    wholeNeg: null
+  };
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.phases)) return null;
+    const phases = data.phases.map(normalizePhase).filter(Boolean);
+    if (!phases.length) return null;
+    let index = data.index | 0;
+    if (index < 0 || index >= phases.length) index = 0;
+    return {
+      topic: String(data.topic || "").slice(0, 80),
+      affName: String(data.affName || "正方").slice(0, 16),
+      negName: String(data.negName || "反方").slice(0, 16),
+      speakers: clamp(data.speakers | 0, MIN_SPEAKERS, MAX_SPEAKERS),
+      muted: !!data.muted,
+      index,
+      phases
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+let state = load() || fresh();
+
+function save() {
+  lastSave = Date.now();
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (err) { /* 文件页面可能禁掉存储，当场仍可用 */ }
+}
+function saveSoon() {
+  if (Date.now() - lastSave < 1000) return;
+  save();
+}
+
+function affLabel() { return state.affName.trim() || "正方"; }
+function negLabel() { return state.negName.trim() || "反方"; }
+function cur() { return state.phases[state.index]; }
+function keyOf(which) {
+  if (which === "aff") return "affLeft";
+  if (which === "neg") return "negLeft";
+  return "left";
+}
+function flags(which) {
+  if (which === "aff") return { warn: "warnAff", rang: "rangAff", whole: "wholeAff" };
+  if (which === "neg") return { warn: "warnNeg", rang: "rangNeg", whole: "wholeNeg" };
+  return { warn: "warnSingle", rang: "rangSingle", whole: "wholeSingle" };
+}
+function phaseDone(p) {
+  if (p.mode === "free") return p.affLeft <= 0 && p.negLeft <= 0;
+  return p.left <= 0;
+}
+function who(p) {
+  if (p.mode === "free") return "双方";
+  const side = p.side === "neg" ? negLabel() : affLabel();
+  const sp = speakerName(p.speaker);
+  return sp ? side + " · " + sp : side;
+}
+function sideColor(p) {
+  if (p.mode === "free" || p.side === "both") return "var(--warn)";
+  return p.side === "neg" ? "var(--neg)" : "var(--aff)";
+}
+
+function ensureAudio() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) throw new Error("no-audio");
+  if (!audioCtx) audioCtx = new AC();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+function tone(freq, delay, dur, type, peak) {
+  const c = ensureAudio();
+  const o = c.createOscillator();
+  const g = c.createGain();
+  const t0 = c.currentTime + delay;
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t0);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(peak, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g);
+  g.connect(c.destination);
+  o.start(t0);
+  o.stop(t0 + dur + 0.03);
+}
+function tenSound() {
+  tone(1174.7, 0, 0.18, "sine", 0.28);
+  tone(1568, 0.16, 0.28, "sine", 0.26);
+  tone(1975.5, 0.34, 0.34, "sine", 0.18);
+}
+function timeUpSound() {
+  [0, 0.32, 0.64].forEach((t, i) => {
+    const f = i === 2 ? 659.25 : 880;
+    tone(f, t, 0.7, "sine", 0.4);
+    tone(f * 2.01, t, 0.35, "sine", 0.07);
+  });
+}
+function note(text) { setText(cueNote, text); }
+function playCue(kind, test) {
+  try {
+    const ctx = ensureAudio();
+    if (kind === "ten") tenSound();
+    else timeUpSound();
+    if (test) {
+      note(ctx.state === "running"
+        ? (kind === "ten" ? "已播放十秒提示" : "已播放时间到提示")
+        : "浏览器拦住了声音，请再按一次");
+    }
+  } catch (err) {
+    if (test) note("这台浏览器没有放出声音");
+  }
+}
+function cue(kind) {
+  if (state.muted) return;
+  playCue(kind, false);
+}
+
+function snapshot() {
+  if (!running) return;
+  const p = cur();
+  p[keyOf(active)] = Math.max(0, deadline - Date.now());
+  running = false;
+}
+
+function begin(which) {
+  if (running) snapshot();
+  const p = cur();
+  const key = keyOf(which);
+  if (p[key] <= 0) return false;
+  try { ensureAudio(); } catch (err) { /* 计时不依赖声音 */ }
+  active = which;
+  if (which === "aff" || which === "neg") p.holder = which;
+  const f = flags(which);
+  p[f.whole] = wholeSec(p[key]);
+  deadline = Date.now() + p[key];
+  running = true;
+  return true;
+}
+
+function go(delta) {
+  const n = state.index + delta;
+  if (n < 0 || n >= state.phases.length) return;
+  snapshot();
+  state.index = n;
+  save();
+  paint();
+  renderRail(true);
+}
+
+function resetCurrent() {
+  snapshot();
+  const p = cur();
+  const full = p.duration * 1000;
+  p.left = full;
+  p.affLeft = full;
+  p.negLeft = full;
+  p.holder = "aff";
+  p.warnSingle = p.warnAff = p.warnNeg = false;
+  p.rangSingle = p.rangAff = p.rangNeg = false;
+  p.wholeSingle = p.wholeAff = p.wholeNeg = null;
+  save();
+  paint();
+  renderRail(false);
+}
+
+function toggle() {
+  const p = cur();
+  if (!running && phaseDone(p)) {
+    go(1);
+    return;
+  }
+  if (running) {
+    snapshot();
+    save();
+    paint();
+    renderRail(false);
+    return;
+  }
+  if (p.mode === "free") {
+    let side = p.holder === "neg" ? "neg" : "aff";
+    if (p[keyOf(side)] <= 0) side = side === "aff" ? "neg" : "aff";
+    begin(side);
+  } else {
+    begin("single");
+  }
+  paint();
+}
+
+function consider(p, which) {
+  const key = keyOf(which);
+  const f = flags(which);
+  const left = Math.max(0, deadline - Date.now());
+  p[key] = left;
+  if (left <= 0) {
+    p[key] = 0;
+    running = false;
+    if (!p[f.rang]) {
+      p[f.rang] = true;
+      p[f.warn] = true;
+      cue("end");
+      flash();
+    }
+    return;
+  }
+  const whole = wholeSec(left);
+  if (left > 10000) p[f.warn] = false;
+  // 从 10 秒外进入最后 10 秒时响一次。停在 10 秒内再继续，不重复响。
+  if (whole <= 10 && !p[f.warn]) {
+    p[f.warn] = true;
+    cue("ten");
+  }
+  p[f.whole] = whole;
+}
+
+function engine() {
+  if (running) {
+    consider(cur(), active);
+    saveSoon();
+  }
+  paint();
+  const sig = signature();
+  if (sig !== railKey) renderRail(false);
+}
+
+function flash() {
+  flashEl.classList.remove("go");
+  void flashEl.offsetWidth;
+  flashEl.classList.add("go");
+}
+
+function setRing(el, left, total, color) {
+  const frac = total > 0 ? Math.max(0, Math.min(1, left / total)) : 0;
+  el.setAttribute("stroke-dasharray", "100");
+  el.setAttribute("stroke-dashoffset", String(100 * (1 - frac)));
+  el.style.opacity = frac <= 0.001 ? "0" : "1";
+  el.style.stroke = color;
+}
+
+function paint() {
+  const p = cur();
+  const freeMode = p.mode === "free";
+  document.body.classList.toggle("side-aff", !freeMode && p.side !== "neg");
+  document.body.classList.toggle("side-neg", !freeMode && p.side === "neg");
+  document.body.classList.toggle("side-both", freeMode);
+  $("sideBar").style.background = freeMode
+    ? "linear-gradient(90deg, var(--aff) 0 50%, var(--neg) 50% 100%)"
+    : sideColor(p);
+  single.classList.toggle("is-on", !freeMode);
+  free.classList.toggle("is-on", freeMode);
+  const page = (state.index + 1) + " / " + state.phases.length;
+  if (!freeMode) {
+    const role = who(p);
+    setText(roleLine, role);
+    roleLine.style.color = p.side === "neg" ? "var(--neg)" : "var(--aff)";
+    setText(phaseTitle, p.title || "未命名");
+    const last = p.left > 0 && p.left <= 10000 && (running || p.left < p.duration * 1000);
+    digits.classList.toggle("is-last", last);
+    digits.classList.toggle("is-run", running && last);
+    digits.classList.toggle("is-done", p.left <= 0);
+    setText(digits, fmtMs(p.left));
+    let st = "准备";
+    if (p.left <= 0) st = "时间到";
+    else if (running && p.left <= 10000) st = "最后 10 秒";
+    else if (running) st = "进行中";
+    else if (p.left < p.duration * 1000 && p.left <= 10000) st = "已暂停 · 最后 10 秒";
+    else if (p.left < p.duration * 1000) st = "已暂停";
+    setText(statusEl, st);
+    statusEl.classList.toggle("is-last", st.indexOf("10") !== -1);
+    statusEl.classList.toggle("is-done", st === "时间到");
+    setText(indexLabel, "第 " + page + " 环节");
+    const ringColor = p.left > 0 && p.left <= 10000 ? "var(--warn)" : sideColor(p);
+    setRing(ringBar, p.left, p.duration * 1000, ringColor);
+    let title = "辩论计时器";
+    if (p.left <= 0) title = "时间到 · 辩论计时器";
+    else if (running) title = fmtMs(p.left) + " · " + (p.title || "辩论计时器");
+    if (document.title !== title) document.title = title;
+  } else {
+    setText($("freeTitle"), p.title || "自由辩论");
+    paintPane("aff", p);
+    paintPane("neg", p);
+    free.classList.toggle("panes-live", running);
+    const liveLeft = running ? p[keyOf(active)] : Math.max(p.affLeft, p.negLeft);
+    let title = "自由辩论 · 辩论计时器";
+    if (phaseDone(p)) title = "时间到 · 辩论计时器";
+    else if (running) title = fmtMs(liveLeft) + " · 自由辩论";
+    if (document.title !== title) document.title = title;
+  }
+  const nxt = state.phases[state.index + 1];
+  setText(nextLine, nxt ? "下一环节  " + who(nxt) + "  " + nxt.title : "这是最后一个环节");
+  btnPrev.disabled = state.index === 0;
+  btnNext.disabled = state.index === state.phases.length - 1;
+  btnNext.classList.toggle("is-nudge", phaseDone(p) && state.index < state.phases.length - 1);
+  let mode = "play";
+  if (running) mode = "pause";
+  else if (phaseDone(p) && state.index < state.phases.length - 1) mode = "next";
+  else if (phaseDone(p)) mode = "end";
+  if (btnPlay.dataset.mode !== mode) {
+    btnPlay.dataset.mode = mode;
+    if (mode === "pause") {
+      btnPlay.innerHTML = '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+      btnPlay.setAttribute("aria-label", "暂停");
+    } else if (mode === "next") {
+      btnPlay.innerHTML = '<span class="play-label">下一项</span>';
+      btnPlay.setAttribute("aria-label", "下一环节");
+    } else if (mode === "end") {
+      btnPlay.innerHTML = '<span class="play-label">结束</span>';
+      btnPlay.setAttribute("aria-label", "已结束");
+    } else {
+      btnPlay.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path fill="currentColor" d="M8 5v14l12-7z"/></svg>';
+      btnPlay.setAttribute("aria-label", "开始");
+    }
+  }
+  setText(hint, freeMode
+    ? "空格 暂停或继续 · 1 正方 · 2 反方 · 左右方向键换环节 · F 全屏"
+    : "空格 开始或暂停 · 左右方向键换环节 · R 重置本环节 · F 全屏");
+  renderTotal();
+}
+
+function paintPane(side, p) {
+  const pane = side === "aff" ? affPane : negPane;
+  const timeEl = side === "aff" ? affTime : negTime;
+  const stateEl = side === "aff" ? affState : negState;
+  const ring = side === "aff" ? affRing : negRing;
+  const left = side === "aff" ? p.affLeft : p.negLeft;
+  const speaking = running && active === side;
+  const last = left > 0 && left <= 10000 && left < p.duration * 1000;
+  pane.classList.toggle("is-run", speaking);
+  pane.classList.toggle("is-out", left <= 0);
+  timeEl.classList.toggle("is-last", last || (speaking && left <= 10000));
+  timeEl.classList.toggle("is-done", left <= 0);
+  setText(timeEl, fmtMs(left));
+  setText(side === "aff" ? affNameL : negNameL, side === "aff" ? affLabel() : negLabel());
+  let st = "等待";
+  if (left <= 0) st = "时间到";
+  else if (speaking && left <= 10000) st = "最后 10 秒";
+  else if (speaking) st = "发言中";
+  else if (left < p.duration * 1000 && left <= 10000) st = "剩余不到 10 秒";
+  else if (left < p.duration * 1000) st = "暂停";
+  setText(stateEl, st);
+  stateEl.classList.toggle("is-last", st.indexOf("10") !== -1);
+  stateEl.classList.toggle("is-done", st === "时间到");
+  const color = left > 0 && left <= 10000 && left < p.duration * 1000
+    ? "var(--warn)"
+    : (side === "aff" ? "var(--aff)" : "var(--neg)");
+  setRing(ring, left, p.duration * 1000, color);
+}
+
+function signature() {
+  return state.phases.map((p) => (phaseDone(p) ? "d" : p.affLeft <= 0 || p.negLeft <= 0 ? "p" : "o")).join("") + ":" + state.index;
+}
+
+function renderRail(scroll) {
+  const keep = rail.scrollLeft;
+  const prev = rail.dataset.i || "";
+  rail.replaceChildren();
+  state.phases.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    const tone = p.mode === "free" ? "both" : (p.side === "neg" ? "neg" : "aff");
+    b.className = "rail-item " + tone + (i === state.index ? " is-current" : "") + (phaseDone(p) ? " is-done" : "");
+    b.dataset.i = String(i);
+    const partial = p.mode === "free" && !phaseDone(p) && (p.affLeft <= 0 || p.negLeft <= 0);
+    const k = document.createElement("div");
+    k.className = "k";
+    k.textContent = String(i + 1).padStart(2, "0") + (phaseDone(p) ? "  已结束" : partial ? "  一方已尽" : "");
+    const t = document.createElement("div");
+    t.className = "t";
+    t.textContent = p.title || "未命名";
+    const s = document.createElement("div");
+    s.className = "s";
+    s.textContent = who(p);
+    const d = document.createElement("div");
+    d.className = "d";
+    d.textContent = p.mode === "free" ? "各 " + fmtDur(p.duration) : fmtDur(p.duration);
+    b.append(k, t, s, d);
+    rail.appendChild(b);
+  });
+  railKey = signature();
+  if (scroll || String(state.index) !== prev) {
+    rail.dataset.i = String(state.index);
+    const el = rail.querySelector(".is-current");
+    if (el) {
+      const left = el.offsetLeft - (rail.clientWidth - el.offsetWidth) / 2;
+      rail.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+    }
+  } else {
+    rail.scrollLeft = keep;
+  }
+}
+
+function renderTotal() {
+  const sec = state.phases.reduce((sum, p) => sum + p.duration * (p.mode === "free" ? 2 : 1), 0);
+  setText(totalTime, "全场发言约 " + fmtWords(sec) + "，自由辩论按双方合计");
+}
+
+function renderEditor() {
+  phaseList.replaceChildren();
+  state.phases.forEach((p, i) => {
+    const card = document.createElement("div");
+    const tone = p.mode === "free" ? "both" : (p.side === "neg" ? "neg" : "aff");
+    card.className = "card " + tone;
+    card.dataset.id = p.id;
+    const top = document.createElement("div");
+    top.className = "card-top";
+    const idx = document.createElement("span");
+    idx.className = "idx";
+    idx.textContent = String(i + 1).padStart(2, "0");
+    const title = document.createElement("input");
+    title.className = "f-title";
+    title.value = p.title;
+    title.maxLength = 40;
+    title.setAttribute("aria-label", "环节名称");
+    top.append(idx, title);
+    [["up", "上移", "↑"], ["down", "下移", "↓"], ["del", "删除", "×"]].forEach((spec) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "icon-btn";
+      b.dataset.act = spec[0];
+      b.setAttribute("aria-label", spec[1]);
+      b.textContent = spec[2];
+      if (spec[0] === "del" && state.phases.length === 1) b.disabled = true;
+      if (spec[0] === "up" && i === 0) b.disabled = true;
+      if (spec[0] === "down" && i === state.phases.length - 1) b.disabled = true;
+      top.appendChild(b);
+    });
+    const grid = document.createElement("div");
+    grid.className = "card-grid";
+    grid.append(
+      selectField("方", "f-side", [["aff", affLabel()], ["neg", negLabel()]], p.side === "neg" ? "neg" : "aff", p.mode === "free"),
+      selectField("辩位", "f-speaker", speakerOptions(), String(p.speaker || 0), p.mode === "free"),
+      selectField("类型", "f-mode", [["single", "单计时"], ["free", "自由辩论"]], p.mode, false),
+      numField("分", "f-min", Math.floor(p.duration / 60)),
+      numField("秒", "f-sec", p.duration % 60)
+    );
+    card.append(top, grid);
+    phaseList.appendChild(card);
+  });
+  renderTotal();
+}
+
+function selectField(label, cls, options, value, disabled) {
+  const wrap = document.createElement("label");
+  wrap.className = "field";
+  wrap.appendChild(document.createTextNode(label));
+  const sel = document.createElement("select");
+  sel.className = cls;
+  sel.disabled = !!disabled;
+  options.forEach((pair) => {
+    const op = document.createElement("option");
+    op.value = pair[0];
+    op.textContent = pair[1];
+    if (String(value) === pair[0]) op.selected = true;
+    sel.appendChild(op);
+  });
+  wrap.appendChild(sel);
+  return wrap;
+}
+function speakerOptions() {
+  const list = [["0", "不指定"]];
+  for (let i = 1; i <= MAX_SPEAKERS; i++) list.push([String(i), speakerName(i)]);
+  return list;
+}
+function numField(label, cls, value) {
+  const wrap = document.createElement("label");
+  wrap.className = "field";
+  wrap.appendChild(document.createTextNode(label));
+  const input = document.createElement("input");
+  input.className = cls + " time-inp";
+  input.type = "number";
+  input.min = "0";
+  input.max = cls === "f-min" ? "60" : "59";
+  input.inputMode = "numeric";
+  input.value = String(value);
+  input.setAttribute("aria-label", label);
+  wrap.appendChild(input);
+  return wrap;
+}
+
+function findPhase(id) { return state.phases.find((p) => p.id === id); }
+
+function applyDuration(p, sec) {
+  sec = clamp(Math.round(sec), 0, 3600);
+  if (running && cur().id === p.id) snapshot();
+  const old = p.duration * 1000;
+  p.duration = sec;
+  const full = sec * 1000;
+  ["left", "affLeft", "negLeft"].forEach((key) => {
+    if (p[key] === old) p[key] = full;
+    else if (p[key] > full) p[key] = full;
+  });
+  if (full > 10000) {
+    if (p.left > 10000) p.warnSingle = false;
+    if (p.affLeft > 10000) p.warnAff = false;
+    if (p.negLeft > 10000) p.warnNeg = false;
+  }
+}
+
+function readCardTime(card, p) {
+  const minEl = card.querySelector(".f-min");
+  const secEl = card.querySelector(".f-sec");
+  if (minEl.value.trim() === "" || secEl.value.trim() === "") return;
+  let m = Math.floor(Number(minEl.value));
+  let s = Math.floor(Number(secEl.value));
+  if (!Number.isFinite(m) || !Number.isFinite(s)) return;
+  m = clamp(m, 0, 60);
+  s = clamp(s, 0, 3599);
+  if (s > 59) {
+    m = clamp(m + Math.floor(s / 60), 0, 60);
+    s = s % 60;
+    if (m === 60) s = 0;
+  }
+  applyDuration(p, m * 60 + s);
+}
+
+function setMode(p, mode) {
+  mode = mode === "free" ? "free" : "single";
+  if (p.mode === mode) return;
+  if (running && cur().id === p.id) snapshot();
+  p.mode = mode;
+  const full = p.duration * 1000;
+  if (mode === "free") {
+    p.side = "both";
+    p.speaker = 0;
+    p.holder = "aff";
+  } else if (p.side === "both") {
+    p.side = "aff";
+    if (!p.speaker) p.speaker = 1;
+  }
+  p.left = p.affLeft = p.negLeft = full;
+  p.warnSingle = p.warnAff = p.warnNeg = false;
+  p.rangSingle = p.rangAff = p.rangNeg = false;
+  renderEditor();
+}
+
+function movePhase(p, dir) {
+  const i = state.phases.indexOf(p);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= state.phases.length) return;
+  const curId = cur().id;
+  const tmp = state.phases[i];
+  state.phases[i] = state.phases[j];
+  state.phases[j] = tmp;
+  state.index = state.phases.findIndex((item) => item.id === curId);
+  renderEditor();
+  renderRail(true);
+}
+
+function deletePhase(p) {
+  if (state.phases.length === 1) return;
+  if (running && cur().id === p.id) snapshot();
+  const curId = cur().id;
+  const i = state.phases.indexOf(p);
+  state.phases.splice(i, 1);
+  let next = state.phases.findIndex((item) => item.id === curId);
+  if (next < 0) next = Math.min(i, state.phases.length - 1);
+  state.index = next;
+  renderEditor();
+  renderRail(true);
+}
+
+function setMuted(v) {
+  state.muted = !!v;
+  btnMute.setAttribute("aria-pressed", state.muted ? "true" : "false");
+  setText(btnMute, state.muted ? "提示音关" : "提示音");
+  chkMute.checked = state.muted;
+  save();
+}
+
+function setSheet(open) {
+  sheet.classList.toggle("is-open", open);
+  app.classList.toggle("is-settings", open);
+  sheet.inert = !open;
+  sheet.setAttribute("aria-hidden", open ? "false" : "true");
+  if (!open) return;
+  affName.value = state.affName;
+  negName.value = state.negName;
+  spNum.textContent = String(state.speakers);
+  updateStepButtons();
+  chkMute.checked = state.muted;
+  renderEditor();
+}
+
+function updateStepButtons() {
+  $("spDec").disabled = state.speakers <= MIN_SPEAKERS;
+  $("spInc").disabled = state.speakers >= MAX_SPEAKERS;
+}
+
+function arm(button, label, fn) {
+  let armed = 0;
+  button.addEventListener("click", () => {
+    const now = Date.now();
+    if (now - armed > 2200) {
+      armed = now;
+      button.textContent = "再按一次确认";
+      setTimeout(() => {
+        if (button.textContent === "再按一次确认") button.textContent = label;
+      }, 2000);
+      return;
+    }
+    armed = 0;
+    button.textContent = label;
+    fn();
+  });
+}
+
+topic.addEventListener("input", () => {
+  state.topic = topic.value;
+  saveSoon();
+});
+affName.addEventListener("input", () => {
+  state.affName = affName.value;
+  saveSoon();
+  paint();
+  renderRail(false);
+  if (sheet.classList.contains("is-open")) renderEditor();
+});
+negName.addEventListener("input", () => {
+  state.negName = negName.value;
+  saveSoon();
+  paint();
+  renderRail(false);
+  if (sheet.classList.contains("is-open")) renderEditor();
+});
+btnMute.addEventListener("click", () => setMuted(!state.muted));
+chkMute.addEventListener("change", () => setMuted(chkMute.checked));
+btnFull.addEventListener("click", toggleFull);
+document.addEventListener("fullscreenchange", () => {
+  setText(btnFull, document.fullscreenElement ? "退出全屏" : "全屏");
+});
+btnSettings.addEventListener("click", () => setSheet(!sheet.classList.contains("is-open")));
+$("btnClose").addEventListener("click", () => setSheet(false));
+document.addEventListener("pointerdown", (e) => {
+  if (!sheet.classList.contains("is-open")) return;
+  if (sheet.contains(e.target) || e.target.closest("#btnSettings")) return;
+  setSheet(false);
+});
+$("spDec").addEventListener("click", () => {
+  state.speakers = clamp(state.speakers - 1, MIN_SPEAKERS, MAX_SPEAKERS);
+  spNum.textContent = String(state.speakers);
+  updateStepButtons();
+  save();
+});
+$("spInc").addEventListener("click", () => {
+  state.speakers = clamp(state.speakers + 1, MIN_SPEAKERS, MAX_SPEAKERS);
+  spNum.textContent = String(state.speakers);
+  updateStepButtons();
+  save();
+});
+arm($("btnRegen"), "按此人数生成标准赛程", () => {
+  snapshot();
+  state.phases = generate(state.speakers);
+  state.index = 0;
+  save();
+  renderEditor();
+  renderRail(true);
+  paint();
+});
+arm($("btnFactory"), "恢复初始设置", () => {
+  snapshot();
+  state = fresh();
+  topic.value = "";
+  setMuted(false);
+  setSheet(true);
+  save();
+  renderRail(true);
+  paint();
+});
+$("btnAdd").addEventListener("click", () => {
+  state.phases.push(makePhase({ title: "自定义环节", side: "aff", speaker: 1, duration: 60 }));
+  save();
+  renderEditor();
+  renderRail(false);
+  phaseList.lastElementChild.scrollIntoView({ block: "nearest" });
+});
+$("btnPreview10").addEventListener("click", () => playCue("ten", true));
+$("btnPreviewEnd").addEventListener("click", () => playCue("end", true));
+
+phaseList.addEventListener("input", (e) => {
+  const card = e.target.closest("[data-id]");
+  if (!card) return;
+  const p = findPhase(card.dataset.id);
+  if (!p) return;
+  const t = e.target;
+  if (t.classList.contains("f-title")) p.title = t.value;
+  else if (t.classList.contains("f-side")) {
+    p.side = t.value === "neg" ? "neg" : "aff";
+    card.classList.remove("aff", "neg", "both");
+    card.classList.add(p.side === "neg" ? "neg" : "aff");
+  }
+  else if (t.classList.contains("f-speaker")) p.speaker = clamp(t.value | 0, 0, MAX_SPEAKERS);
+  else if (t.classList.contains("f-mode")) { setMode(p, t.value); save(); paint(); return; }
+  else if (t.classList.contains("f-min") || t.classList.contains("f-sec")) readCardTime(card, p);
+  saveSoon();
+  paint();
+  renderRail(false);
+});
+phaseList.addEventListener("focusout", (e) => {
+  const card = e.target.closest ? e.target.closest("[data-id]") : null;
+  if (!card) return;
+  if (!e.target.classList || (!e.target.classList.contains("f-min") && !e.target.classList.contains("f-sec"))) return;
+  const p = findPhase(card.dataset.id);
+  if (!p) return;
+  const minEl = card.querySelector(".f-min");
+  const secEl = card.querySelector(".f-sec");
+  if (minEl.value.trim() === "") minEl.value = "0";
+  if (secEl.value.trim() === "") secEl.value = "0";
+  readCardTime(card, p);
+  minEl.value = String(Math.floor(p.duration / 60));
+  secEl.value = String(p.duration % 60);
+  save();
+  paint();
+  renderRail(false);
+});
+phaseList.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-act]");
+  if (!btn) return;
+  const card = btn.closest("[data-id]");
+  const p = findPhase(card.dataset.id);
+  if (!p) return;
+  if (btn.dataset.act === "up") movePhase(p, -1);
+  else if (btn.dataset.act === "down") movePhase(p, 1);
+  else if (btn.dataset.act === "del") deletePhase(p);
+  save();
+  paint();
+});
+phaseList.addEventListener("wheel", (e) => {
+  if (e.target.type === "number") e.target.blur();
+}, { passive: true });
+
+rail.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-i]");
+  if (!b) return;
+  const i = Number(b.dataset.i);
+  if (i === state.index) return;
+  snapshot();
+  state.index = i;
+  save();
+  paint();
+  renderRail(true);
+});
+btnPrev.addEventListener("click", () => go(-1));
+btnNext.addEventListener("click", () => go(1));
+btnReset.addEventListener("click", resetCurrent);
+btnPlay.addEventListener("click", () => {
+  if (btnPlay.dataset.mode === "next") go(1);
+  else if (btnPlay.dataset.mode !== "end") toggle();
+});
+affPane.addEventListener("click", () => pressSide("aff"));
+negPane.addEventListener("click", () => pressSide("neg"));
+
+function pressSide(side) {
+  const p = cur();
+  if (p.mode !== "free") return;
+  if (p[keyOf(side)] <= 0) return;
+  if (running && active === side) {
+    snapshot();
+    save();
+    paint();
+    return;
+  }
+  begin(side);
+  paint();
+}
+
+function toggleFull() {
+  if (!document.fullscreenElement) {
+    const node = document.documentElement;
+    if (node.requestFullscreen) node.requestFullscreen();
+  } else if (document.exitFullscreen) {
+    document.exitFullscreen();
+  }
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.repeat) return;
+  const typing = e.target && (e.target.closest && (e.target.closest("input, textarea, select") || e.target.isContentEditable));
+  if (e.key === "Escape") {
+    if (sheet.classList.contains("is-open")) setSheet(false);
+    return;
+  }
+  if (typing || sheet.classList.contains("is-open")) return;
+  if (e.key === " " || e.code === "Space") {
+    e.preventDefault();
+    if (btnPlay.dataset.mode === "next") go(1);
+    else if (btnPlay.dataset.mode !== "end") toggle();
+  } else if (e.key === "ArrowRight") {
+    e.preventDefault();
+    go(1);
+  } else if (e.key === "ArrowLeft") {
+    e.preventDefault();
+    go(-1);
+  } else if (e.key === "r" || e.key === "R") {
+    resetCurrent();
+  } else if (e.key === "f" || e.key === "F") {
+    toggleFull();
+  } else if (e.key === "m" || e.key === "M") {
+    setMuted(!state.muted);
+  } else if ((e.key === "1" || e.key === "2") && cur().mode === "free") {
+    e.preventDefault();
+    pressSide(e.key === "1" ? "aff" : "neg");
+  }
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && running) {
+    cur()[keyOf(active)] = Math.max(0, deadline - Date.now());
+    save();
+  }
+});
+window.addEventListener("beforeunload", () => {
+  if (running) cur()[keyOf(active)] = Math.max(0, deadline - Date.now());
+  save();
+});
+
+function boot() {
+  topic.value = state.topic;
+  sheet.inert = true;
+  setMuted(state.muted);
+  setText(btnFull, "全屏");
+  renderRail(true);
+  paint();
+  setInterval(engine, 100);
+}
+boot();
+</script>
+</body>
+</html>
